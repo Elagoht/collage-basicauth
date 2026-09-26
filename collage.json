@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Elagoht/collage-snippets-highlighter/main/schemas/collage-plugin-manifest.schema.json",
+  "name": "elagoht/basicauth",
+  "description": "A collage plugin that puts HTTP Basic authentication in front of a site: a staging deployment, a preview, a site not launched yet.",
+  "repository": "https://github.com/Elagoht/collage-basicauth",
+  "config": {
+    "type": "object",
+    "description": "A collage plugin that puts HTTP Basic authentication in front of a site: a staging deployment, a preview, a site not launched yet.",
+    "properties": {
+      "disabled": {
+        "type": "boolean",
+        "description": "Disabled turns the plugin off, as EnvDisabled does. A disabled plugin needs no users."
+      },
+      "protect": {
+        "type": "array",
+        "description": "Protect are the path prefixes that need a sign-in. Default [\"/\"], everything.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "realm": {
+        "type": "string",
+        "description": "Realm is what the browser's sign-in dialog names. Default \"Restricted\"."
+      },
+      "skip": {
+        "type": "array",
+        "description": "Skip are path prefixes that never do, even under Protect. Default [\"/healthz\", \"/_collage/\"]: a load balancer's health check has no password, and neither does collage's development reload stream.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "users": {
+        "type": "object",
+        "description": "Users maps a name to a password: in plain text, as \"sha256:\" and the hex of its SHA-256, or as a bcrypt hash (\"$2a$…\", \"$2b$…\", \"$2y$…\"). A plain password that happens to begin with one of those is written \"plain:…\". Users from EnvUsers are added to these, and win on a name in both.",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
