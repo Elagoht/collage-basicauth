@@ -13,7 +13,7 @@ app, err := collage.New(&collage.Config{
 })
 ```
 
-Requires collage v0.23.0 or later.
+Requires collage v0.24.0 or later.
 
 ## Users
 
@@ -73,9 +73,10 @@ A disabled plugin needs no users, and logs once that the site is open.
 collage's development reload stream.
 
 A prefix covers whole segments: `/healthz` covers `/healthz` and `/healthz/db`, not
-`/healthz-report`. A path with dot segments or doubled slashes is never skipped —
-collage's router does not clean paths, so `/_collage/../admin` is not a
-development endpoint and is asked for a password like any other.
+`/healthz-report`. collage redirects a path with dot segments or doubled slashes
+to its clean spelling before any middleware runs, so `/_collage/../admin` arrives
+as `/admin` and is asked for a password like any other. The plugin does not rely on
+that alone: a path with dot segments or doubled slashes is never skipped.
 
 A request without the right name and password is answered `401` with
 `WWW-Authenticate: Basic realm="Restricted", charset="UTF-8"`, a one-line text
@@ -131,3 +132,10 @@ without a leading `/` — each stops the application from starting.
   protected site to cache regardless of them.
 - It applies in development too, unless disabled there: registering it with
   users is taken to mean you want the gate.
+
+## Changes
+
+### v0.1.1
+
+- README: collage v0.24.0 cleans paths before middleware; the plugin keeps refusing to skip a path with dot segments or doubled slashes as a second line.
+- Requires collage v0.24.0.

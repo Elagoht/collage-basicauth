@@ -113,9 +113,17 @@ func TestSkipAndProtect(t *testing.T) {
 	if rec := get(h, "/healthz"); rec.Code != http.StatusOK || rec.Body.String() != "ok" {
 		t.Errorf("health check: %d %q", rec.Code, rec.Body.String())
 	}
-	for _, path := range []string{"/healthz-report", "/_collage/../admin", "//admin"} {
+	for _, path := range []string{"/healthz-report", "/admin"} {
 		if rec := get(h, path); rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s: %d, want 401", path, rec.Code)
+		}
+	}
+	// collage redirects a path with dot segments or doubled slashes to its
+	// clean spelling before any middleware runs, so neither reaches the skip
+	// list; the plugin's own refusal to skip one stays behind that.
+	for _, path := range []string{"/_collage/../admin", "//admin"} {
+		if rec := get(h, path); rec.Code != http.StatusMovedPermanently || rec.Header().Get("Location") != "/admin" {
+			t.Errorf("%s: %d %q, want collage's redirect to /admin", path, rec.Code, rec.Header().Get("Location"))
 		}
 	}
 

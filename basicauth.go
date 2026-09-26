@@ -99,7 +99,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.0" }
+func (p *Plugin) Version() string                { return "0.1.1" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,
@@ -236,9 +236,10 @@ func (p *Plugin) middleware(next http.Handler) http.Handler {
 
 // protects reports whether urlPath needs a sign-in.
 //
-// A path with dot segments or doubled slashes is never skipped. collage's router
-// does not clean paths, so /_collage/../admin is not a development endpoint and
-// must not be treated as one.
+// A path with dot segments or doubled slashes is never skipped, so
+// /_collage/../admin is never treated as a development endpoint. collage v0.24.0
+// redirects such a path before any middleware runs; this stays as a second line,
+// for a handler that does not.
 func (p *Plugin) protects(urlPath string) bool {
 	clean := cleanPath(urlPath)
 	if clean != urlPath {
