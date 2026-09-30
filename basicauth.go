@@ -99,7 +99,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.2" }
+func (p *Plugin) Version() string                { return "0.1.3" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,
