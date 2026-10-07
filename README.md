@@ -135,7 +135,7 @@ without a leading `/` — each stops the application from starting.
 
 ## Changes
 
-### v0.1.4
+### v0.1.5
 
 - Requires collage v0.50.0. Plugin configuration is read with `collage.PluginConfig`, since `host.Config` is gone. Nothing else changes.
 
