@@ -125,8 +125,16 @@ without a leading `/` — each stops the application from starting.
   encrypted. Serve the site over HTTPS, or anyone on the network reads it.
 - There is no signing out: a browser keeps sending the credentials until it is
   closed. It is a gate for a staging site, not an account system.
-- The plugin wraps requests, and a static build makes none: a built site carries
-  no password. Protect it where it is served.
+- **A static build writes protected pages anyway**, and a built site carries no
+  password: the plugin wraps requests, and a build renders its pages directly.
+  The build warns with `basicauth-exported`, naming how many written files fall
+  under `Protect` (and outside `Skip`) and up to five of them, at the path a
+  static host serves each at. Protect them at the host, or leave them out of the
+  build; a production build with the plugin disabled is not warned.
+  A build's header capture (collage v0.52.0, `collage.IsCapture`) is let
+  through, so the headers deployed with a page are its own, not a `401`'s.
+  Because the plugin checks finished builds, every build of a site using it runs
+  that capture.
 - A CDN that ignores both `private` and `Vary` — some can be configured to cache
   everything — defeats any origin's headers. Do not tell the CDN in front of a
   protected site to cache regardless of them.
@@ -134,6 +142,11 @@ without a leading `/` — each stops the application from starting.
   users is taken to mean you want the gate.
 
 ## Changes
+
+### v0.1.7
+
+- Requires collage v0.53.0. A static build's header capture (`collage.IsCapture`) is let through rather than answered `401`, so a deployed page no longer carries `WWW-Authenticate`, `Cache-Control: no-store` and `text/plain` from the refusal.
+- A static build that writes files under a protected path warns with `basicauth-exported`, naming how many and up to five of them: a static host serves them without a password.
 
 ### v0.1.6
 

@@ -31,6 +31,8 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,7 +75,10 @@ type Options struct {
 	Disabled bool `json:"disabled"`
 }
 
-var _ collage.Plugin = (*Plugin)(nil)
+var (
+	_ collage.Plugin            = (*Plugin)(nil)
+	_ collage.BuildFinishedHook = (*Plugin)(nil)
+)
 
 // Plugin asks for a name and password.
 type Plugin struct {
@@ -99,7 +104,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.6" }
+func (p *Plugin) Version() string                { return "0.1.7" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,
@@ -216,7 +221,12 @@ func (p *Plugin) prepare() error {
 
 func (p *Plugin) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !p.protects(r.URL.Path) {
+		// A static build's header capture is the build asking, in process, for
+		// the headers it deploys a file with: never a visitor, so nothing is
+		// exposed. It gets the page's own headers, not a 401's, nor the private
+		// ones a signed-in reader is sent. Whether such a file should be built
+		// at all is OnBuildFinished's to say.
+		if collage.IsCapture(r.Context()) || !p.protects(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -258,6 +268,58 @@ func (p *Plugin) protects(urlPath string) bool {
 		}
 	}
 	return false
+}
+
+// exportedNamed is how many paths a basicauth-exported warning names.
+const exportedNamed = 5
+
+// OnBuildFinished warns when a static build wrote a file under a protected
+// path. A build renders pages directly, not through the middleware, so it
+// writes them; a static host then serves them to anyone, with no password.
+func (p *Plugin) OnBuildFinished(_ context.Context, ev *collage.BuildFinishedEvent) error {
+	if p.opts.Disabled {
+		return nil
+	}
+	var paths []string
+	for _, f := range ev.Files {
+		served := servedAt(ev.OutDir, f)
+		if p.protects(served) || (f.Path != "" && p.protects(f.Path)) {
+			paths = append(paths, served)
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	slices.Sort(paths)
+	paths = slices.Compact(paths)
+	named, more := paths, ""
+	if len(named) > exportedNamed {
+		named = named[:exportedNamed]
+		more = fmt.Sprintf(" and %d more", len(paths)-exportedNamed)
+	}
+	ev.Warn("", "basicauth-exported", fmt.Sprintf(
+		"%d built file(s) are under a path basicauth protects (%s%s): a static host serves them without a password; protect them at the host or leave them out of the build",
+		len(paths), strings.Join(named, ", "), more))
+	return nil
+}
+
+// servedAt is the path a static host serves f at, as elagoht/deploy derives
+// it: its file under outDir with "index.html" dropped, so about/index.html is
+// "/about/"; with no file under outDir, its route.
+func servedAt(outDir string, f collage.BuiltFile) string {
+	p := f.Path
+	if f.File != "" && outDir != "" {
+		if rel, err := filepath.Rel(outDir, f.File); err == nil && filepath.IsLocal(rel) {
+			p = filepath.ToSlash(rel)
+		}
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if dir, ok := strings.CutSuffix(p, "/index.html"); ok {
+		return dir + "/"
+	}
+	return p
 }
 
 // under reports whether urlPath is prefix or below it, by whole segments:
