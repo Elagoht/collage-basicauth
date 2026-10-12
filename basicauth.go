@@ -67,8 +67,9 @@ type Options struct {
 	// everything.
 	Protect []string `json:"protect"`
 	// Skip are path prefixes that never do, even under Protect. Default
-	// ["/healthz", "/_collage/"]: a load balancer's health check has no
-	// password, and neither does collage's development reload stream.
+	// ["/healthz", "/readyz", "/_collage/"]: a load balancer's health and
+	// readiness checks have no password, and neither does collage's
+	// development reload stream.
 	Skip []string `json:"skip"`
 	// Disabled turns the plugin off, as EnvDisabled does. A disabled plugin
 	// needs no users.
@@ -104,7 +105,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.8" }
+func (p *Plugin) Version() string                { return "0.1.9" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,
@@ -209,7 +210,7 @@ func (p *Plugin) prepare() error {
 		o.Protect = []string{"/"}
 	}
 	if o.Skip == nil {
-		o.Skip = []string{"/healthz", "/_collage/"}
+		o.Skip = []string{"/healthz", "/readyz", "/_collage/"}
 	}
 	for _, prefix := range append(append([]string(nil), o.Protect...), o.Skip...) {
 		if !strings.HasPrefix(prefix, "/") {

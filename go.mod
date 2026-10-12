@@ -5,7 +5,7 @@ module github.com/Elagoht/collage-basicauth
 
 go 1.26.0
 
-require github.com/Elagoht/collage v0.60.0
+require github.com/Elagoht/collage v0.61.0
 
 require golang.org/x/crypto v0.57.0
 

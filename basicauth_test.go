@@ -3,44 +3,48 @@ package basicauth_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	basicauth "github.com/Elagoht/collage-basicauth"
 	"github.com/Elagoht/collage/pkg/collage"
+	"github.com/Elagoht/collage/pkg/collagetest"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func site(t *testing.T, opts basicauth.Options, config map[string]json.RawMessage) http.Handler {
-	t.Helper()
-	app, err := collage.New(&collage.Config{
-		Server: collage.ServerConfig{Host: "localhost", Port: 3000},
-		Template: collage.TemplateConfig{FS: fstest.MapFS{
-			"t/p.html": {Data: []byte(`<main>secret</main>`)},
-		}, Root: "t"},
-		Cache:        collage.CacheConfig{Enabled: true, Type: "memory", DefaultTTL: time.Hour},
-		Plugins:      []collage.Plugin{basicauth.New(opts)},
-		PluginConfig: config,
-	})
-	if err != nil {
-		t.Fatal(err)
+// siteOptions build a site with pages at /, /admin and /healthz-report, and
+// documents at /healthz and /readyz, behind basicauth.New(opts) with config as
+// its plugin configuration when it is not empty.
+func siteOptions(opts basicauth.Options, config string) []collagetest.SiteOption {
+	items := []collage.Registrable{
+		collage.NewDocument("health", "text/plain").AtRoot("/healthz").WithBody([]byte("ok")).Build(),
+		collage.NewDocument("ready", "text/plain").AtRoot("/readyz").WithBody([]byte("ready")).Build(),
 	}
 	for name, path := range map[string]string{"home": "/", "admin": "/admin", "report": "/healthz-report"} {
 		// Static, so collage marks it public and caches it.
-		page := collage.NewPage(name).WithContent(collage.NewFragment(name, "p.html").Build()).WithPath("en", path).Static().Build()
-		if err := app.RegisterPage(page); err != nil {
-			t.Fatal(err)
-		}
+		items = append(items, collage.NewPage(name).WithContent(collage.NewFragment(name, "p.html").Build()).WithPath("en", path).Static().Build())
 	}
-	if err := app.RegisterDocument(collage.NewDocument("health", "text/plain").AtRoot("/healthz").WithBody([]byte("ok")).Build()); err != nil {
-		t.Fatal(err)
+	options := []collagetest.SiteOption{
+		collagetest.WithoutHome(),
+		collagetest.WithTemplates(map[string]string{"p.html": `<main>secret</main>`}),
+		collagetest.WithConfig(func(c *collage.Config) {
+			c.Cache = collage.CacheConfig{Enabled: true, Type: "memory", DefaultTTL: time.Hour}
+		}),
+		collagetest.WithRegister(items...),
+		collagetest.WithPlugins(basicauth.New(opts)),
 	}
-	return app.Handler()
+	if config != "" {
+		options = append(options, collagetest.WithPluginConfig(basicauth.Name, config))
+	}
+	return options
+}
+
+func site(t *testing.T, opts basicauth.Options, config string) http.Handler {
+	t.Helper()
+	return collagetest.NewSite(t, siteOptions(opts, config)...).App.Handler()
 }
 
 func get(h http.Handler, path string, credentials ...string) *httptest.ResponseRecorder {
@@ -68,7 +72,7 @@ func TestSignIn(t *testing.T) {
 		"hashed":  sha("hashed-pw"),
 		"crypted": string(hash),
 		"literal": "plain:sha256:not-a-hash",
-	}}, nil)
+	}}, "")
 
 	refused := get(h, "/")
 	if refused.Code != http.StatusUnauthorized || refused.Header().Get("WWW-Authenticate") != `Basic realm="Staging", charset="UTF-8"` {
@@ -93,7 +97,7 @@ func TestSignIn(t *testing.T) {
 // collage marks a cached page public, which would let a CDN keep it for anyone.
 // Once signed in, it is private and varies by Authorization.
 func TestResponsesArePrivate(t *testing.T) {
-	h := site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, nil)
+	h := site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, "")
 	rec := get(h, "/", "team", "pw")
 	if got := rec.Header().Get("Cache-Control"); got != "private, max-age=0, must-revalidate" {
 		t.Errorf("Cache-Control = %q", got)
@@ -109,9 +113,12 @@ func TestResponsesArePrivate(t *testing.T) {
 }
 
 func TestSkipAndProtect(t *testing.T) {
-	h := site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, nil)
+	h := site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, "")
 	if rec := get(h, "/healthz"); rec.Code != http.StatusOK || rec.Body.String() != "ok" {
 		t.Errorf("health check: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := get(h, "/readyz"); rec.Code != http.StatusOK || rec.Body.String() != "ready" {
+		t.Errorf("readiness check: %d %q", rec.Code, rec.Body.String())
 	}
 	for _, path := range []string{"/healthz-report", "/admin"} {
 		if rec := get(h, path); rec.Code != http.StatusUnauthorized {
@@ -127,7 +134,7 @@ func TestSkipAndProtect(t *testing.T) {
 		}
 	}
 
-	h = site(t, basicauth.Options{Users: map[string]string{"team": "pw"}, Protect: []string{"/admin"}}, nil)
+	h = site(t, basicauth.Options{Users: map[string]string{"team": "pw"}, Protect: []string{"/admin"}}, "")
 	if rec := get(h, "/"); rec.Code != http.StatusOK {
 		t.Errorf("an unprotected page: %d", rec.Code)
 	}
@@ -137,24 +144,22 @@ func TestSkipAndProtect(t *testing.T) {
 }
 
 func TestDisabled(t *testing.T) {
-	if rec := get(site(t, basicauth.Options{Disabled: true}, nil), "/"); rec.Code != http.StatusOK {
+	if rec := get(site(t, basicauth.Options{Disabled: true}, ""), "/"); rec.Code != http.StatusOK {
 		t.Errorf("disabled in options: %d", rec.Code)
 	}
 	t.Setenv(basicauth.EnvDisabled, "true")
-	if rec := get(site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, nil), "/"); rec.Code != http.StatusOK {
+	if rec := get(site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, ""), "/"); rec.Code != http.StatusOK {
 		t.Errorf("disabled by the environment: %d", rec.Code)
 	}
 	t.Setenv(basicauth.EnvDisabled, "perhaps")
-	if rec := get(site(t, basicauth.Options{Users: map[string]string{"team": "pw"}}, nil), "/"); rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("an unreadable switch: %d, want 503", rec.Code)
+	if _, err := collagetest.TrySite(t, siteOptions(basicauth.Options{Users: map[string]string{"team": "pw"}}, "")...); err == nil {
+		t.Error("an unreadable switch: the application started")
 	}
 }
 
 func TestEnvironmentAndConfiguration(t *testing.T) {
 	t.Setenv(basicauth.EnvUsers, "ops:"+sha("ops-pw")+", dev:dev-pw")
-	h := site(t, basicauth.Options{}, map[string]json.RawMessage{
-		basicauth.Name: json.RawMessage(`{"users": {"cfg": "cfg-pw"}, "realm": "Preview"}`),
-	})
+	h := site(t, basicauth.Options{}, `{"users": {"cfg": "cfg-pw"}, "realm": "Preview"}`)
 	for _, c := range [][2]string{{"ops", "ops-pw"}, {"dev", "dev-pw"}, {"cfg", "cfg-pw"}} {
 		if rec := get(h, "/", c[0], c[1]); rec.Code != http.StatusOK {
 			t.Errorf("%s: %d", c[0], rec.Code)
@@ -177,8 +182,8 @@ func TestMisconfiguration(t *testing.T) {
 		"relative skip":   {Users: map[string]string{"team": "pw"}, Skip: []string{"healthz"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if rec := get(site(t, opts, nil), "/"); rec.Code != http.StatusServiceUnavailable {
-				t.Errorf("status %d, want 503", rec.Code)
+			if _, err := collagetest.TrySite(t, siteOptions(opts, "")...); err == nil {
+				t.Error("the application started")
 			}
 		})
 	}

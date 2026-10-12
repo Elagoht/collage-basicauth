@@ -13,7 +13,7 @@ app, err := collage.New(&collage.Config{
 })
 ```
 
-Requires collage v0.50.0 or later.
+Requires collage v0.61.0 or later.
 
 ## Users
 
@@ -68,9 +68,9 @@ A disabled plugin needs no users, and logs once that the site is open.
 ## Which paths
 
 `Protect` lists the path prefixes that need a sign-in, by default `/`, everything.
-`Skip` lists those that never do, even under `Protect`, by default `/healthz` and
-`/_collage/`: a load balancer's health check has no password, and neither does
-collage's development reload stream.
+`Skip` lists those that never do, even under `Protect`, by default `/healthz`,
+`/readyz` and `/_collage/`: a load balancer's health and readiness checks have no
+password, and neither does collage's development reload stream.
 
 A prefix covers whole segments: `/healthz` covers `/healthz` and `/healthz/db`, not
 `/healthz-report`. collage redirects a path with dot segments or doubled slashes
@@ -109,7 +109,7 @@ caches are shut out. A response already `no-store` is left alone.
     "users": { "team": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" },
     "realm": "Staging",
     "protect": ["/"],
-    "skip": ["/healthz", "/_collage/"],
+    "skip": ["/healthz", "/readyz", "/_collage/"],
     "disabled": false
   }
 }
@@ -142,6 +142,16 @@ without a leading `/` — each stops the application from starting.
   users is taken to mean you want the gate.
 
 ## Changes
+
+### v0.1.9
+
+Changed in v0.1.9, for the v1 plugin conventions:
+
+- `skip` defaults to `["/healthz", "/readyz", "/_collage/"]`: `/readyz`, the
+  readiness path elagoht/health serves, is no longer behind the sign-in. A
+  `skip` you set yourself is used as it is.
+- `collage.json` has a `setup` note: the plugin needs a user, or `disabled`.
+- Requires collage v0.61.0.
 
 ### v0.1.8
 
