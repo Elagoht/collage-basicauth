@@ -143,6 +143,11 @@ without a leading `/` — each stops the application from starting.
 
 ## Changes
 
+### v0.1.8
+
+- Rebuilt against collage v0.60.0; the plugin's code is unchanged.
+- Requires collage v0.60.0.
+
 ### v0.1.7
 
 - Requires collage v0.53.0. A static build's header capture (`collage.IsCapture`) is let through rather than answered `401`, so a deployed page no longer carries `WWW-Authenticate`, `Cache-Control: no-store` and `text/plain` from the refusal.
