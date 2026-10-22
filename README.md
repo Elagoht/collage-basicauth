@@ -30,7 +30,10 @@ A plain password that happens to begin with `sha256:` or `$2` is written with
 
 Every comparison takes the same time whether it fails early or late, and a name
 nobody has is checked against a password nobody has: how long a refusal takes
-says nothing about which names exist.
+says nothing about which names exist. With any bcrypt user, every refusal pays
+one bcrypt check, a plain or `sha256:` user's wrong password included, so a fast
+refusal does not mark that name as one of the cheaper users. Users of different
+bcrypt costs still differ by their cost; give them one cost.
 
 bcrypt is slow on purpose — tens of milliseconds a check. A reader who signed in
 sends the password again with every request, so a successful check is remembered
@@ -142,6 +145,14 @@ without a leading `/` — each stops the application from starting.
   users is taken to mean you want the gate.
 
 ## Changes
+
+### v0.1.10
+
+- With bcrypt and plain or `sha256:` users mixed, a wrong password for a plain
+  or `sha256:` user also pays one bcrypt check, as an unknown name does. Before,
+  it was refused in microseconds while an unknown name took tens of
+  milliseconds, so the timing named those users.
+- Requires collage v0.61.4.
 
 ### v0.1.9
 

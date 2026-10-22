@@ -188,3 +188,35 @@ func TestMisconfiguration(t *testing.T) {
 		})
 	}
 }
+
+// With bcrypt and sha256 users mixed, a wrong password for a sha256 or plain
+// user takes as long as an unknown name's refusal, which pays a bcrypt: a
+// microsecond refusal would name the cheap users. bcrypt at cost 8 takes
+// milliseconds against a sha256's microseconds, so the comparison is between
+// orders of magnitude, not noise.
+func TestRefusalTimeHidesSchemes(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("bcrypt-pw"), 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := site(t, basicauth.Options{Users: map[string]string{
+		"crypted": string(hash), "hashed": sha("hashed-pw"), "plain": "open sesame",
+	}}, "")
+	fastest := func(name string) time.Duration {
+		best := time.Duration(1 << 62)
+		for range 5 {
+			start := time.Now()
+			if w := get(h, "/", name, "wrong"); w.Code != http.StatusUnauthorized {
+				t.Fatalf("%s: %d, want 401", name, w.Code)
+			}
+			best = min(best, time.Since(start))
+		}
+		return best
+	}
+	unknown := fastest("nobody")
+	for _, name := range []string{"hashed", "plain"} {
+		if d := fastest(name); d < unknown/4 {
+			t.Errorf("%s refused in %v, an unknown name in %v: the timing names the user", name, d, unknown)
+		}
+	}
+}

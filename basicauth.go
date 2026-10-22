@@ -105,7 +105,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.9" }
+func (p *Plugin) Version() string                { return "0.1.10" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,
@@ -347,6 +347,15 @@ func cleanPath(p string) string {
 // compared, without stopping at a match, and an unknown name is checked against a
 // password nobody has: how long a refusal takes says nothing about which names
 // exist.
+//
+// With any bcrypt user, every refusal costs one bcrypt check: an unknown name's
+// against the dummy hash, a bcrypt user's against its own, and a plain or sha256
+// user's, after its digest compares unequal, against the dummy too. Without
+// that last one, a wrong password for a sha256 user is refused in microseconds
+// while an unknown name takes a bcrypt's tens of milliseconds, and the fast
+// refusals name the sha256 users. Matching the cheapest scheme instead would
+// only move the leak to the bcrypt users. A sha256 user who signs in pays no
+// bcrypt: a success says the name exists anyway.
 func (p *Plugin) check(name, password string) bool {
 	nameSum := sha256.Sum256([]byte(name))
 	var match *user
@@ -366,7 +375,13 @@ func (p *Plugin) check(name, password string) bool {
 	}
 	if match.bcrypt == nil {
 		sum := sha256.Sum256([]byte(password))
-		return subtle.ConstantTimeCompare(sum[:], match.digest) == 1
+		if subtle.ConstantTimeCompare(sum[:], match.digest) == 1 {
+			return true
+		}
+		if p.hasBcrypt {
+			_ = bcrypt.CompareHashAndPassword(p.dummy, []byte(password))
+		}
+		return false
 	}
 	mac := hmac.New(sha256.New, p.cacheKey)
 	mac.Write([]byte(name))
