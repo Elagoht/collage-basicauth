@@ -2,8 +2,11 @@
 
 A collage plugin that puts HTTP Basic authentication in front of a site — a
 staging deployment, a preview, a site not launched yet. Registering it is the
-whole of it: every request then needs a name and password, and the browser asks
-for them.
+whole of it for what collage serves — pages, documents, actions, mounted files,
+plugins' handlers — which then need a name and password, and the browser asks
+for them. **A handler the application mounts itself with `app.Handle` is not
+covered unless it is mounted `collage.WithMiddleware()`**; see
+[Which paths](#which-paths).
 
 ```go
 app, err := collage.New(&collage.Config{
@@ -13,7 +16,7 @@ app, err := collage.New(&collage.Config{
 })
 ```
 
-Requires collage v0.61.0 or later.
+Requires collage v0.67.0 or later.
 
 ## Users
 
@@ -39,9 +42,22 @@ bcrypt is slow on purpose — tens of milliseconds a check. A reader who signed 
 sends the password again with every request, so a successful check is remembered
 for the life of the process (up to 1024 of them, under a key made at startup)
 rather than paid for on every page. A failed one is paid for every time, which is
-the point of bcrypt and also a way to spend the server's CPU; put
-[elagoht/ratelimit](https://github.com/Elagoht/collage-ratelimit) in front of it
-if the site is exposed.
+the point of bcrypt and also a way to spend the server's CPU: anyone can send
+`Authorization: Basic x:y` with every request. If the site is exposed, put
+[elagoht/ratelimit](https://github.com/Elagoht/collage-ratelimit) in front of it,
+with a rule that counts every method — its default rule leaves out GET, which is
+what a password guesser sends — and list it **before** basicauth, so a refused
+guess is counted before the bcrypt check is paid for:
+
+```go
+Plugins: []collage.Plugin{
+	ratelimit.New(ratelimit.Options{Rules: []ratelimit.Rule{{Methods: []string{"*"}, Rate: 5, Burst: 50}}}),
+	basicauth.New(basicauth.Options{}),
+},
+```
+
+Plugins' middleware wraps requests in the order the plugins are listed, the
+first outermost; `collage plugin add` does not reorder these two.
 
 The application will not start with no users: a site nobody can sign in to is a
 mistake, not a configuration.
@@ -80,6 +96,20 @@ A prefix covers whole segments: `/healthz` covers `/healthz` and `/healthz/db`, 
 to its clean spelling before any middleware runs, so `/_collage/../admin` arrives
 as `/admin` and is asked for a password like any other. The plugin does not rely on
 that alone: a path with dot segments or doubled slashes is never skipped.
+
+What is covered is what goes through collage's middleware: every page,
+document, action, mounted directory and plugin handler (`Host.Handle`). A
+handler the application mounts itself with `app.Handle` is bare since collage
+v0.67.0 — no middleware runs for it, this plugin's included — so on a
+"protected" staging host an API, webhook, export or
+[elagoht/uploads](https://github.com/Elagoht/collage-uploads) handler mounted that
+way answers anyone. Mount it inside the chain to put it behind the password:
+
+```go
+app.Handle("/api/", api, collage.WithMiddleware())
+```
+
+`Protect` and `Skip` then apply to its paths as to any other.
 
 A request without the right name and password is answered `401` with
 `WWW-Authenticate: Basic realm="Restricted", charset="UTF-8"`, a one-line text
@@ -145,6 +175,15 @@ without a leading `/` — each stops the application from starting.
   users is taken to mean you want the gate.
 
 ## Changes
+
+### v0.1.11
+
+- Documentation: the README and the package doc said every request needs a
+  password. A handler mounted with `app.Handle` is bare and is not covered
+  unless mounted `collage.WithMiddleware()`; both now say so, and say to list
+  elagoht/ratelimit, with a rule counting every method, before this plugin to
+  bound the bcrypt work refused guesses cost. No behaviour change.
+- Requires collage v0.67.0 (`WithMiddleware`).
 
 ### v0.1.10
 

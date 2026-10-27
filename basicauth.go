@@ -12,6 +12,16 @@
 // or with COLLAGE_BASICAUTH_DISABLED=true, so one binary is open there and closed
 // elsewhere.
 //
+// It wraps what goes through collage's middleware: pages, documents, actions,
+// mounted files and plugins' handlers. A handler the application mounts with
+// app.Handle runs outside every plugin's middleware, this one's included, and
+// answers without a password unless it is mounted with collage.WithMiddleware():
+//
+//	app.Handle("/api/", api, collage.WithMiddleware())
+//
+// Every refused guess pays a bcrypt check when any user has a bcrypt hash: list
+// elagoht/ratelimit, with a rule counting every method, before this plugin.
+//
 // collage marks a cached page "public", which is what lets a CDN keep it — and a
 // shared cache may store a response to a request carrying Authorization when the
 // response says public. So every authenticated response is turned private on
@@ -105,7 +115,7 @@ type user struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string                   { return Name }
-func (p *Plugin) Version() string                { return "0.1.10" }
+func (p *Plugin) Version() string                { return "0.1.11" }
 func (p *Plugin) Shutdown(context.Context) error { return nil }
 
 // Init reads and checks the configuration and, unless the plugin is disabled,

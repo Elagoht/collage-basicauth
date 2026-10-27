@@ -220,3 +220,28 @@ func TestRefusalTimeHidesSchemes(t *testing.T) {
 		}
 	}
 }
+
+// A handler the application mounts with app.Handle runs outside every plugin's
+// middleware, this one included, unless it is mounted WithMiddleware: the README
+// says so, and this pins it. (PLUGA-04)
+func TestHandleNeedsWithMiddleware(t *testing.T) {
+	data := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("staging data")) })
+	options := append(siteOptions(basicauth.Options{Users: map[string]string{"team": "pw"}}, ""),
+		collagetest.WithSetup(func(app *collage.App) error {
+			if err := app.Handle("/api/", data, collage.WithMiddleware()); err != nil {
+				return err
+			}
+			return app.Handle("/bare/", data)
+		}))
+	h := collagetest.NewSite(t, options...).App.Handler()
+
+	if rec := get(h, "/api/export"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a handler mounted WithMiddleware answered without a password: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := get(h, "/api/export", "team", "pw"); rec.Code != http.StatusOK || rec.Body.String() != "staging data" {
+		t.Errorf("signed in, a handler mounted WithMiddleware: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := get(h, "/bare/export"); rec.Code != http.StatusOK {
+		t.Errorf("a bare app.Handle is now behind the password (%d): update the README", rec.Code)
+	}
+}
