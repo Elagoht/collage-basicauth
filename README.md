@@ -182,8 +182,11 @@ without a leading `/` — each stops the application from starting.
   password. A handler mounted with `app.Handle` is bare and is not covered
   unless mounted `collage.WithMiddleware()`; both now say so, and say to list
   elagoht/ratelimit, with a rule counting every method, before this plugin to
-  bound the bcrypt work refused guesses cost. No behaviour change.
-- Requires collage v0.67.0 (`WithMiddleware`).
+  bound the bcrypt work refused guesses cost. The plugin itself is unchanged.
+- Requires collage v0.67.0 (`WithMiddleware`). An application still on an older
+  collage is moved up to it, and from v0.67.0 its `app.Handle` mounts no longer
+  run behind basicauth: mount them `collage.WithMiddleware()` to keep them
+  protected.
 
 ### v0.1.10
 
